@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>VerilogAI - AI-Powered Verilog Assistant</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="description" content="AI-powered tool for debugging, explaining, and generating Verilog code">
+
+  <!-- CodeMirror 5 (CDN) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/verilog/verilog.min.js"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <div class="logo">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="#6aa1ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M2 17L12 22L22 17" stroke="#6aa1ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M2 12L12 17L22 12" stroke="#6aa1ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <h1>VerilogAI</h1>
+    </div>
+    <span class="pill">local backend: http://127.0.0.1:8000</span>
+  </header>
+
+  <main>
+    <!-- Editor -->
+    <section class="card">
+      <div class="toolbar">
+        <div class="row grow">
+          <button id="btnDebug" class="tooltip" data-tooltip="Analyze code for issues">Debug</button>
+          <button id="btnExplain" class="tooltip" data-tooltip="Explain the code">Explain</button>
+          <button id="btnGenerate" class="tooltip" data-tooltip="Generate from description">Generate</button>
+          <button id="btnChat" class="primary tooltip" data-tooltip="Ask general questions">Chat</button>
+        </div>
+        <button id="btnApply" class="tooltip" data-tooltip="Apply code from reply">Apply Fix</button>
+        <button id="btnDownload" class="tooltip" data-tooltip="Download as .v file">Download .v</button>
+      </div>
+      <div class="cm-container" id="editor"></div>
+      <div class="panel">
+        <span id="status" class="status ready">ready</span>
+      </div>
+    </section>
+
+    <!-- Right column: prompt + output -->
+    <aside class="card side">
+      <div class="toolbar">
+        <strong>Prompt</strong>
+      </div>
+      <div style="padding:12px 16px">
+        <textarea id="prompt" class="textarea" placeholder="Describe your module or ask a question...&#10;Example: '8-bit synchronous up-counter with active-low async reset and enable'"></textarea>
+        <div class="small" style="margin-top:8px">Tip: Be specific about requirements (reset type, width, enable, timing).</div>
+      </div>
+      <div class="toolbar">
+        <strong>Chat History</strong>
+      </div>
+      <div class="panel" id="chat-container">
+        <div class="chat-container" id="chat-history"></div>
+        <div class="chat-input-container">
+          <button id="btnNewChat" class="small clear-chat">New Chat</button>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <script>
+    // ---- Editor setup ----
+    const cm = CodeMirror(document.getElementById('editor'), {
+      mode: 'verilog',
+      lineNumbers: true,
+      tabSize: 2,
+      indentUnit: 2,
+      indentWithTabs: false,
+      theme: 'default',
+      value:
+`// Try me:
+// module counter (input clk, input rst_n, input en, output reg [3:0] q);
+//   always @(posedge clk or negedge rst_n) begin
+//     if (!rst_n) q <= 4'd0;
+//     else if (en) q <= q + 1'b1;
+//   end
+// endmodule`
+    });
+
+    const chatHistoryEl = document.getElementById('chat-history');
+    const statusEl = document.getElementById('status');
+    const promptEl = document.getElementById('prompt');
+    const btnNewChat = document.getElementById('btnNewChat');
+
+    const API_BASE = 'http://127.0.0.1:8000';
+    let conversationHistory = [];
+
+    // Load conversation history from localStorage
+    function loadConversation() {
+      const saved = localStorage.getItem('verilogai_conversation');
+      if (saved) {
+        try {
+          conversationHistory = JSON.parse(saved);
+          renderChatHistory();
+        } catch (e) {
+          console.error('Failed to load conversation', e);
+        }
+      }
+    }
+
+    // Save conversation history to localStorage
+    function saveConversation() {
+      localStorage.setItem('verilogai_conversation', JSON.stringify(conversationHistory));
+    }
+
+    // Clear conversation history
+    function clearConversation() {
+      conversationHistory = [];
+      saveConversation();
+      renderChatHistory();
+    }
+
+    // Render chat history to the UI
+    function renderChatHistory() {
+      chatHistoryEl.innerHTML = '';
+      conversationHistory.forEach(msg => {
+        const msgEl = document.createElement('div');
+        msgEl.className = `chat-message ${msg.role}`;
+        msgEl.innerHTML = `
+          <div class="role">${msg.role === 'user' ? 'You' : 'VerilogAI'}</div>
+          <div class="content">${renderMarkdown(msg.content)}</div>
+        `;
+        chatHistoryEl.appendChild(msgEl);
+      });
+      chatHistoryEl.scrollTop = chatHistoryEl.scrollHeight;
+    }
+
+    // Add a message to the conversation
+    function addMessage(role, content) {
+      conversationHistory.push({ role, content });
+      saveConversation();
+      renderChatHistory();
+    }
+
+    function setStatus(msg, type = 'ready') {
+      statusEl.textContent = msg;
+      statusEl.className = 'status ' + type;
+    }
+    
+    // Render markdown to HTML with headings, bullets, code blocks, etc.
+    function renderMarkdown(md) {
+      if (!md) return '(no output)';
+      // Headings: #, ##, ###
+      md = md.replace(/^### (.*)$/gm, '<h3>$1</h3>');
+      md = md.replace(/^## (.*)$/gm, '<h2>$1</h2>');
+      md = md.replace(/^# (.*)$/gm, '<h1>$1</h1>');
+      // Bullets: - or *
+      md = md.replace(/^(\s*[-*]) (.*)$/gm, '<li>$2</li>');
+      md = md.replace(/(<li>.*<\/li>)/g, '<ul>$1</ul>');
+      // Numbered lists: 1. 2. 3.
+      md = md.replace(/^(\d+)\. (.*)$/gm, '<li>$2</li>');
+      md = md.replace(/(<li>.*<\/li>)/g, '<ol>$1</ol>');
+      // Inline code: `code`
+      md = md.replace(/`([^`]+)`/g, '<code>$1</code>');
+      // Code blocks: ```lang\n...```
+      md = md.replace(/```([a-z]*)\n([\s\S]*?)```/g, function(_, lang, code){
+        return `<pre class="code-block"><code>${code.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</code></pre>`;
+      });
+      // Bold: **text**
+      md = md.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+      // Italic: *text*
+      md = md.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+      // Paragraphs
+      md = md.replace(/\n{2,}/g, '<\/p><p>');
+      md = '<p>' + md + '<\/p>';
+      return md;
+    }
+
+    async function postJSON(path, body){
+      const res = await fetch(`${API_BASE}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) {
+        const t = await res.text();
+        throw new Error(`HTTP ${res.status}: ${t}`);
+      }
+      return res.json();
+    }
+
+    // Extract the first ```verilog ... ``` or ``` ... ``` code block
+    function extractCodeBlock(markdown) {
+      if (!markdown) return null;
+      const triple = markdown.match(/```(?:verilog)?\s*([\s\S]*?)```/i);
+      return triple ? triple[1].trim() : null;
+    }
+
+    // Initialize conversation
+    loadConversation();
+
+    // New chat button
+    btnNewChat.onclick = clearConversation;
+
+    // --- Button handlers ---
+    document.getElementById('btnChat').onclick = async () => {
+      const prompt = promptEl.value.trim();
+      if (!prompt) {
+        setStatus('Please enter a message', 'error');
+        return;
+      }
+
+      // Add user message to conversation
+      addMessage('user', prompt);
+      promptEl.value = '';
+      setStatus('chatting...', 'working');
+      
+      try {
+        // Include conversation history in the request
+        const { reply } = await postJSON('/chat', { 
+          prompt,
+          history: conversationHistory.slice(0, -1) // exclude current user message
+        });
+        
+        // Add assistant reply to conversation
+        addMessage('assistant', reply);
+        setStatus('done', 'ready');
+      } catch (e) {
+        addMessage('assistant', `Error: ${e.message}`);
+        setStatus('error', 'error');
+      }
+    };
+
+    document.getElementById('btnDebug').onclick = async () => {
+      const code = cm.getValue();
+      setStatus('debugging...', 'working');
+      try {
+        const { reply } = await postJSON('/debug', { code });
+        addMessage('assistant', `Debug results:\n${reply}`);
+        setStatus('done', 'ready');
+      } catch (e) {
+        addMessage('assistant', `Error: ${e.message}`);
+        setStatus('error', 'error');
+      }
+    };
+
+    document.getElementById('btnExplain').onclick = async () => {
+      const code = cm.getValue();
+      setStatus('explaining...', 'working');
+      try {
+        const { reply } = await postJSON('/explain', { code });
+        addMessage('assistant', `Code explanation:\n${reply}`);
+        setStatus('done', 'ready');
+      } catch (e) {
+        addMessage('assistant', `Error: ${e.message}`);
+        setStatus('error', 'error');
+      }
+    };
+
+    document.getElementById('btnGenerate').onclick = async () => {
+      const spec = promptEl.value.trim() || '8-bit synchronous up-counter with active-low async reset and enable';
+      setStatus('generating...', 'working');
+      try {
+        const { reply } = await postJSON('/generate', { spec });
+        addMessage('assistant', `Generated code based on: "${spec}"\n${reply}`);
+        // If a code block is present, load it into the editor:
+        const code = extractCodeBlock(reply);
+        if (code) cm.setValue(code);
+        setStatus('done', 'ready');
+      } catch (e) {
+        addMessage('assistant', `Error: ${e.message}`);
+        setStatus('error', 'error');
+      }
+    };
+
+    // Apply Fix: try to extract the code block from the last assistant message
+    document.getElementById('btnApply').onclick = () => {
+      const lastAssistantMsg = [...conversationHistory].reverse().find(msg => msg.role === 'assistant');
+      if (lastAssistantMsg) {
+        const code = extractCodeBlock(lastAssistantMsg.content);
+        if (code) {
+          cm.setValue(code);
+          setStatus('applied fix to editor', 'ready');
+        } else {
+          setStatus('no code block found to apply', 'error');
+        }
+      } else {
+        setStatus('no assistant messages found', 'error');
+      }
+    };
+
+    // Download editor content as .v
+    document.getElementById('btnDownload').onclick = () => {
+      const code = cm.getValue();
+      const blob = new Blob([code], {type:'text/plain'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'module.v';
+      a.click();
+      URL.revokeObjectURL(a.href);
+      setStatus('downloaded module.v', 'ready');
+    };
+  </script>
+</body>
+</html>

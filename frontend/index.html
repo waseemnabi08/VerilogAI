@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VerilogAI - Chat Interface</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Toggle -->
+        <button class="sidebar-toggle" id="sidebarToggle">
+            <i class="fas fa-bars"></i>
+        </button>
+
+        <!-- Sidebar -->
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <i class="fas fa-microchip"></i>
+                    <span>VerilogAI</span>
+                </div>
+                <button class="new-chat-btn" id="newChatBtn">
+                    <i class="fas fa-plus"></i>
+                    New Chat
+                </button>
+            </div>
+            
+            <div class="chat-history" id="chatHistory">
+                <!-- Chat history will be populated here -->
+            </div>
+            
+            <div class="sidebar-footer">
+                <div class="status-indicator">
+                    <i class="fas fa-circle"></i>
+                    <span>API Connected</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Chat Area -->
+        <div class="main-content">
+            <!-- Chat Header -->
+            <div class="chat-header">
+                <div class="header-title">
+                    <h1>VerilogAI</h1>
+                    <p>AI Assistant for Verilog & SystemVerilog</p>
+                </div>
+            </div>
+
+            <!-- Chat Messages -->
+            <div class="chat-messages" id="chatMessages">
+                <!-- Welcome message -->
+                <div class="message assistant welcome-message">
+                    <div class="message-avatar">
+                        <i class="fas fa-robot"></i>
+                    </div>
+                    <div class="message-content">
+                        <h3>Welcome to VerilogAI! 👋</h3>
+                        <p>I can help you with:</p>
+                        <ul>
+                            <li>📝 Generating Verilog/SystemVerilog code</li>
+                            <li>🔍 Debugging and explaining existing code</li>
+                            <li>💡 Best practices and optimization</li>
+                            <li>🧪 Testbench creation and verification</li>
+                        </ul>
+                        <p>What would you like to work on today?</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chat Input -->
+            <div class="chat-input-container">
+                <div class="input-actions">
+                    <button class="action-btn" id="debugBtn" title="Debug Code">
+                        <i class="fas fa-bug"></i>
+                        Debug
+                    </button>
+                    <button class="action-btn" id="explainBtn" title="Explain Code">
+                        <i class="fas fa-question-circle"></i>
+                        Explain
+                    </button>
+                    <button class="action-btn primary" id="generateBtn" title="Generate Code">
+                        <i class="fas fa-magic"></i>
+                        Generate
+                    </button>
+                </div>
+                
+                <div class="input-wrapper">
+                    <textarea 
+                        id="chatInput" 
+                        placeholder="Message VerilogAI..."
+                        rows="1"
+                    ></textarea>
+                    <button id="sendBtn" class="send-btn">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
