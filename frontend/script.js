@@ -169,13 +169,15 @@ async function handleDebugRequest(message) {
         },
         body: JSON.stringify({ code: message })
     });
-    
     if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
     }
-    
     const data = await response.json();
-    return data.reply;
+    let reply = data.reply;
+    if (data.verilog_syntax_error) {
+        reply += `\n\n<b style='color:red'>Syntax Error:</b> <pre>${data.verilog_syntax_error}</pre>`;
+    }
+    return reply;
 }
 
 async function handleExplainRequest(message) {
@@ -203,13 +205,42 @@ async function handleGenerateRequest(message) {
         },
         body: JSON.stringify({ spec: message })
     });
-    
     if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
     }
-    
     const data = await response.json();
-    return data.reply;
+    let reply = data.reply;
+    if (data.verilog_syntax_error) {
+        reply += `\n\n<b style='color:red'>Syntax Error:</b> <pre>${data.verilog_syntax_error}</pre>`;
+    }
+    return reply;
+// Fetch and show examples from backend
+document.addEventListener('DOMContentLoaded', () => {
+    const examplesBtn = document.getElementById('examplesBtn');
+    if (examplesBtn) {
+        examplesBtn.addEventListener('click', async () => {
+            try {
+                const res = await fetch(`${API_BASE}/examples`);
+                const data = await res.json();
+                showExamples(data);
+            } catch (e) {
+                showExamples({ error: 'Failed to fetch examples.' });
+            }
+        });
+    }
+});
+
+function showExamples(data) {
+    const sidebar = document.getElementById('sidebar');
+    let exDiv = document.getElementById('examplesDiv');
+    if (!exDiv) {
+        exDiv = document.createElement('div');
+        exDiv.id = 'examplesDiv';
+        exDiv.className = 'sidebar-examples';
+        sidebar.appendChild(exDiv);
+    }
+    exDiv.innerHTML = data.error ? `<div style='color:red'>${data.error}</div>` : `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+}
 }
 
 // Add message to chat
